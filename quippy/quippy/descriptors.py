@@ -23,7 +23,8 @@
 import quippy
 from ase import Atoms
 import numpy as np
-from ase.io.extxyz import key_val_dict_to_str
+from ase.io.extxyz import key_val_dict_to_str, key_val_str_to_dict
+from quippy.convert import get_dict_arrays
 
 __all__ = ['Descriptor']
 
@@ -40,7 +41,11 @@ def convert_atoms_types_iterable_method(method):
         if isinstance(at, quippy.atoms_types_module.Atoms):
             return method(self, at, *args, **kw)
         elif isinstance(at, Atoms):
-            _quip_at = quippy.convert.ase_to_quip(at, **self.ase_to_quip_kwargs)
+            _quip_at = quippy.convert.ase_to_quip(at, add_arrays=True, **self.ase_to_quip_kwargs)
+            # my old branch 
+            # _quip_at = quippy.convert.ase_to_quip(at, **self.ase_to_quip_kwargs)
+            # public branch  
+            # _quip_at = quippy.convert.ase_to_quip(at,add_arrays=True)
             return method(self, _quip_at, *args, **kw)
         else:
             return [wrapper(self, atelement, *args, **kw) for atelement in at]
@@ -102,7 +107,7 @@ class Descriptor:
         return self._quip_descriptor.cutoff()
 
     @convert_atoms_types_iterable_method
-    def sizes(self, at, cutoff=None):
+    def sizes(self, at, args_str=None, cutoff=None):
         """
         Replicating the QUIP method, is used in the rest of the methods
         """
@@ -110,18 +115,26 @@ class Descriptor:
         # calc connectivity on the atoms object with the internal one
         self._calc_connect(at, cutoff)
 
-        n_descriptors, n_cross = self._quip_descriptor.sizes(at)
+        mask = None
+        if args_str is not None:
+            args_str_dict = key_val_str_to_dict(args_str)
+            if "atom_mask_name" in args_str_dict:
+                try:
+                    mask = get_dict_arrays(at.properties)[args_str_dict["atom_mask_name"]].astype(bool)
+                except Exception:
+                    raise KeyError
+        n_descriptors, n_cross = self._quip_descriptor.sizes(at,mask=mask)
 
         return n_descriptors, n_cross
 
     @convert_atoms_types_iterable_method
-    def count(self, at):
+    def count(self, at, args_str=None):
         """
         Returns how many descriptors of this type are found in the Atoms
         object.
         """
         # fixme: is the decorator needed now?
-        return self.sizes(at)[0]
+        return self.sizes(at,args_str=args_str)[0]
 
     @convert_atoms_types_iterable_method
     def _calc_connect(self, at, cutoff=None):
@@ -184,7 +197,7 @@ class Descriptor:
                                                         args_str=args_str)
 
         # unpack to a list of dicts
-        count = self.count(at)
+        count = self.count(at, args_str=args_str)
         descriptor_out = dict()
         for i in range(count):
             # unpack to dict with the specific converter function

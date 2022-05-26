@@ -125,12 +125,16 @@ module linearalgebra_module
   integer, parameter :: QR             = 2
 
   type LA_Matrix
-     real(qp), dimension(:,:), allocatable :: matrix, factor
+     real(qp), dimension(:,:), pointer :: matrix
+     real(qp), dimension(:,:), allocatable :: factor
      real(qp), dimension(:), allocatable :: s, tau
      integer :: n, m
+     logical :: use_allocate = .true.
      logical :: initialised = .false.
      logical :: equilibrated = .false.
      integer :: factorised = NOT_FACTORISED
+     contains
+     final :: LA_Matrix_Finalise
   endtype LA_Matrix
 
   interface Initialise
@@ -138,7 +142,7 @@ module linearalgebra_module
   endinterface Initialise
 
   interface assignment(=)
-     module procedure LA_Matrix_Initialise
+     module procedure LA_Matrix_Initialise_Matrix
      module procedure LA_Matrix_Initialise_Copy
   end interface assignment(=)
 
@@ -2182,23 +2186,36 @@ CONTAINS
 
   ! Cholesky factorisation of a symmetric matrix.
   ! Various checks (size, symmetricity etc.) might be useful later.
-  subroutine LA_Matrix_Initialise(this,matrix)
+  subroutine LA_Matrix_Initialise(this,matrix,use_allocate)
 
      type(LA_Matrix), intent(inout) :: this
-     real(qp), dimension(:,:), intent(in) :: matrix
+     real(qp), dimension(:,:), intent(in), target :: matrix
+     logical, intent(in), optional :: use_allocate
 
      if(this%initialised) call finalise(this)
+
+     this%use_allocate = optional_default(.true., use_allocate)
 
      this%n = size(matrix,1)
      this%m = size(matrix,2)
 
-     allocate(this%matrix(this%n,this%m), this%factor(this%n,this%m), this%s(this%n), &
-     this%tau(this%m) )
+     if (this%use_allocate) then
+       allocate(this%matrix(this%n,this%m))
+       this%matrix = matrix
+     else
+       this%matrix => matrix
+     end if
 
-     this%matrix = matrix
+     allocate(this%factor(this%n,this%m), this%s(this%n), this%tau(this%m))
      this%initialised = .true.
 
   endsubroutine LA_Matrix_Initialise
+
+  subroutine LA_Matrix_Initialise_Matrix(this,matrix)
+   type(LA_Matrix), intent(inout) :: this
+   real(qp), dimension(:,:), intent(in) :: matrix
+   call Initialise(this,matrix)
+  endsubroutine LA_Matrix_Initialise_Matrix
 
   subroutine LA_Matrix_Initialise_Copy(this, from)
 
@@ -2207,7 +2224,8 @@ CONTAINS
 
      if(this%initialised) call finalise(this)
 
-     if (allocated(from%matrix)) then
+     this%use_allocate = .true.
+     if (associated(from%matrix)) then
        allocate(this%matrix(size(from%matrix,1), size(from%matrix,2)))
        this%matrix = from%matrix
      end if
@@ -2267,7 +2285,8 @@ CONTAINS
 
      this%n = 0
      this%m = 0
-     if(allocated(this%matrix) ) deallocate(this%matrix)
+     if(this%use_allocate .and. associated(this%matrix)) deallocate(this%matrix)
+     this%matrix => null()
      if(allocated(this%factor) ) deallocate(this%factor)
      if(allocated(this%s) ) deallocate(this%s)
      if(allocated(this%tau) ) deallocate(this%tau)
@@ -3723,37 +3742,42 @@ CONTAINS
     call print ("};", verbosity, file)
   end subroutine matrix_z_print_mathematica
 
-  subroutine matrix_condition_number(A, rcond, norm)
-    real(dp), intent(inout) :: A(:,:)
-    real(dp), intent(out) :: rcond
+  !% Returns reciprocal condtion number of matrix A using norm
+  function matrix_condition_number(A, norm) result(rcond)
+    real(dp), intent(in) :: A(:,:)
     character, intent(in) :: norm !% 1 or O: 1-norm, I: inf-norm
+    real(dp) :: rcond
 
     integer :: m, n, minmn, lda, info
     real(dp) :: anorm
     integer, allocatable :: ipiv(:), iwork(:)
     real(dp), allocatable :: work(:)
-
+    real(dp), allocatable :: Acopy(:,:)
+    
     real(dp), external :: dlange
-
+        
     rcond = -1.0_dp
-
+    
     m = size(A, 1)
     n = size(A, 2)
     lda = m
 
+    allocate(Acopy(m,n))
+    Acopy = A
+
     allocate(work(m))
-    anorm = dlange(norm, m, n, a, lda, work)
+    anorm = dlange(norm, m, n, Acopy, lda, work)
     deallocate(work)
 
     minmn = min(m, n)
     allocate(ipiv(minmn))
-    call dgetrf(m, n, A, lda, ipiv, info)
+    call dgetrf(m, n, Acopy, lda, ipiv, info)
     deallocate(ipiv)
 
     allocate(work(4 * n))
     allocate(iwork(n))
-    call dgecon(norm, n, a, lda, anorm, rcond, work, iwork, info)
-  end subroutine matrix_condition_number
+    call dgecon(norm, n, Acopy, lda, anorm, rcond, work, iwork, info)
+  end function matrix_condition_number
 
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 !X

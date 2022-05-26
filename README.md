@@ -16,9 +16,9 @@ semiconductors.
 For more details, see the [online documentation](http://libatoms.github.io/QUIP).
 
 Long term support of the package is ensured by:
- - Noam Bernstein (Naval Research Laboratory)
- - Gabor Csanyi (University of Cambridge)
- - James Kermode (University of Warwick)
+ - Noam Bernstein ([@bernstei](https://github.com/bernstei), Naval Research Laboratory)
+ - Gabor Csanyi ([@gabor1](https://github.com/gabor1), University of Cambridge)
+ - James Kermode ([@jameskermode](https://github.com/jameskermode), University of Warwick)
 
 Portions of this code were written by: Albert Bartok-Partay, Livia
 Bartok-Partay, Federico Bianchini, Anke Butenuth, Marco Caccin,
@@ -28,12 +28,68 @@ Alan Nichol, David Packwood, Lars Pastewka, Giovanni Peralta, Ivan
 Solt, Oliver Strickson, Wojciech Szlachta, Csilla Varnai, Steven
 Winfield, Tamas K Stenczel, Adam Fekete.
 
-Copyright 2006-2019.
+Copyright 2006-2021.
 
 Most of the publicly available version is released under the GNU
 General Public license, version 2, with some portions in the public
 domain. The GAP code, included as a submodule, is distributed under
 a non-commerical [academic source license](https://github.com/libAtoms/GAP/blob/main/LICENSE.md)
+
+## Citing QUIP, quippy and GAP
+
+Please cite the following publication if you use QUIP:
+
+```bibtex
+@ARTICLE{Csanyi2007-py,
+  title   = "Expressive Programming for Computational Physics in Fortran 95+",
+  author  = "Cs{\'a}nyi, G{\'a}bor and Winfield, Steven and Kermode, J R and De
+             Vita, A and Comisso, Alessio and Bernstein, Noam and Payne,
+             Michael C",
+  journal = "IoP Comput. Phys. Newsletter",
+  pages   = "Spring 2007",
+  year    =  2007
+}
+```
+
+If you use the `quippy` Python interface, please cite:
+
+```bibtex
+@ARTICLE{Kermode2020-wu,
+  title    = "f90wrap: an automated tool for constructing deep Python
+              interfaces to modern Fortran codes",
+  author   = "Kermode, James R",
+  journal  = "J. Phys. Condens. Matter",
+  month    =  mar,
+  year     =  2020,
+  keywords = "Fortran; Interfacing; Interoperability; Python; Wrapping codes;
+              f2py",
+  language = "en",
+  issn     = "0953-8984, 1361-648X",
+  pmid     = "32209737",
+  doi      = "10.1088/1361-648X/ab82d2"
+}
+```
+
+If you use the GAP code please cite
+
+```bibtex
+
+@ARTICLE{Bartok2010-pw,
+  title    = "Gaussian approximation potentials: the accuracy of quantum
+              mechanics, without the electrons",
+  author   = "Bart{\'o}k, Albert P and Payne, Mike C and Kondor, Risi and
+              Cs{\'a}nyi, G{\'a}bor",
+  journal  = "Phys. Rev. Lett.",
+  volume   =  104,
+  number   =  13,
+  pages    = "136403",
+  month    =  apr,
+  year     =  2010,
+  issn     = "0031-9007, 1079-7114",
+  pmid     = "20481899",
+  doi      = "10.1103/PhysRevLett.104.136403"
+}
+```
 
 ## Features
 
@@ -311,7 +367,6 @@ to get up and running quickly.
   git add src/GAP
   git commit -m "updating the version of GAP"
   ```
-
 
 ### Mac OS
 

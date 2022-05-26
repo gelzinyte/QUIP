@@ -54,11 +54,14 @@ GAP_FILES = $(addprefix ../../src/GAP/,${GAP_SOURCES})
 WRAP_SOURCES = ${LIBATOMS_SOURCES} ${POT_SOURCES}
 WRAP_FILES = ${LIBATOMS_FILES} ${POT_FILES}
 
-PROGRAMS = quip
+PROGRAMS = quip md
 ifeq (${HAVE_GAP},1)
 	WRAP_SOURCES +=  ${GAP_SOURCES}
 	WRAP_FILES +=  ${GAP_FILES}
 	PROGRAMS += gap_fit
+endif
+ifeq (${HAVE_VASP},1)
+	PROGRAMS += vasp_driver
 endif
 
 WRAP_FPP_FILES = $(addsuffix .fpp,$(basename ${WRAP_SOURCES}))
@@ -110,7 +113,7 @@ ${F90WRAP_FILES}: ${WRAP_FPP_FILES}
 
 quippy/_quippy${EXT_SUFFIX} ${F90WRAP_OBJS}: ${F90WRAP_FILES}
 	F90=${F90} LDFLAGS="${QUIPPY_LDFLAGS}" f2py-f90wrap --build-dir . -c -m _quippy ${F90WRAP_FILES} \
-		-L. -lquip_nostub ${F2PY_LINK_ARGS} --f90flags="${QUIPPY_F90FLAGS}"
+		-L. -lquip_nostub ${F2PY_LINK_ARGS} --fcompiler=${QUIPPY_FCOMPILER} --f90flags="${QUIPPY_F90FLAGS}"
 	mv _quippy${EXT_SUFFIX} quippy/
 
 build: f90wrap quippy/_quippy${EXT_SUFFIX} ${QUIPPY_SRC_DIR}/quippy/*.py

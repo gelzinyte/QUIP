@@ -47,6 +47,7 @@
 
 module system_module
   use error_module
+  use kind_module
 !$ use omp_lib
 #ifdef _MPI
 #ifndef _OLDMPI
@@ -66,21 +67,7 @@ private
 
   logical, public :: system_use_fortran_random = .false.
 
-#ifdef HAVE_QP
-  integer, parameter, public :: qp = 16
-#elsif TEN_DIGIT_PRECISION
-  integer, parameter, public :: qp = selected_real_kind(10) !kind(1.0d0)
-#else
-  integer, parameter, public :: qp = 8
-#endif
-
-#ifdef QUAD_PRECISION
-  integer, parameter, public :: dp = 16 ! kind(1.0d0)
-#elsif TEN_DIGIT_PRECISION
-  integer, parameter, public :: dp = selected_real_kind(10) !kind(1.0d0)
-#else
-  integer, parameter, public :: dp = 8 ! kind(1.0d0)
-#endif
+  public :: isp, idp, dp, qp
 
   character, public :: quip_new_line
 
@@ -215,6 +202,7 @@ private
      module procedure inoutput_print_string
      module procedure inoutput_print_integer, inoutput_print_real, inoutput_print_logical
      module procedure inoutput_print_char_array
+     module procedure print_inoutput
   end interface print
 
   private :: reada_real_dim1, reada_int_dim1
@@ -250,7 +238,7 @@ private
   public :: operator(//)
 
   interface operator(//)
-     module procedure string_cat_logical, string_cat_int, string_cat_real, string_cat_real_array
+     module procedure string_cat_logical, string_cat_isp, string_cat_idp, string_cat_real, string_cat_real_array
      module procedure string_cat_complex, string_cat_int_array, string_cat_logical_array
      module procedure string_cat_complex_array, string_cat_string_array
 !     module procedure logical_cat_string, logical_cat_logical, logical_cat_int, logical_cat_real
@@ -289,6 +277,11 @@ private
        real(8), intent(out) :: total_mem, free_mem
      endsubroutine c_mem_info
   endinterface c_mem_info
+
+  public :: mem_info
+  interface mem_info
+    module procedure mem_info_i, mem_info_r
+  end interface mem_info
 
   private :: Stack_Initialise
   interface Initialise
@@ -343,6 +336,21 @@ private
      module procedure string_to_real_sub, string_to_integer_sub, string_to_logical_sub
      module procedure string_to_real1d, string_to_integer1d, string_to_logical1d
   end interface string_to_numerical
+
+  public :: int_format_length
+  interface int_format_length
+     module procedure int_format_length_isp, int_format_length_idp
+  end interface int_format_length
+
+  public :: get_uniqs_refs
+  interface get_uniqs_refs
+     module procedure get_uniqs_refs_char1
+  end interface
+
+  public :: join
+  interface join
+     module procedure join_char1
+  end interface
 
   integer, external :: pointer_to
   public :: increase_stack
@@ -404,6 +412,9 @@ private
   public :: make_run_directory
   public :: link_run_directory
   public :: wait_for_file_to_exist
+  public :: is_open
+  public :: increase_to_multiple
+  public :: i2si
 contains
 
 #ifdef NO_FORTRAN_ISNAN
@@ -505,7 +516,7 @@ contains
 
        else
           this%filename=trim(filename)
-          this%unit=pick_up_unit()! pick up a unit from available(7-99)
+          this%unit=pick_up_unit() ! pick up available unit
 
           ! actually open the unit
           if ((.not. my_master_only) .or. mpi_myid == 0) then
@@ -560,14 +571,18 @@ contains
 
   end subroutine inoutput_initialise
 
+  !% OMIT
+  function is_open(unit)
+    integer, intent(in) :: unit
+    logical :: is_open
+    inquire(unit, opened=is_open)
+  end function is_open
 
   !% OMIT
   function pick_up_unit() result(unit)
     integer::unit,i
-    logical::iopened
     do i=7,99
-       INQUIRE(i,opened=iopened)
-       if(.NOT.iopened) then
+      if (.not. is_open(i)) then
           unit=i
           exit
        end if
@@ -775,6 +790,28 @@ contains
     call print(local_line, verbosity, file, nocr=nocr)
   end subroutine inoutput_print_real
 
+  subroutine print_inoutput(this)
+    type(inoutput), intent(in) :: this
+
+    call print_title("type(inoutput)")
+    call print("unit "//this% unit)
+    call print("filename "//this%filename)
+    call print("prefix "//this%prefix)
+    call print("postfix "//this%postfix)
+    call print("default_real_precision "//this%default_real_precision)
+    call print("formatted "//this%formatted)
+    call print("append "//this%append)
+    call print("active "//this%active)
+    call print("action "//this%action)
+    call print("mpi_all_inoutput_flag "//this%mpi_all_inoutput_flag)
+    call print("mpi_print_id "//this%mpi_print_id)
+    call print("verbosity_stack: ")
+    call print(this%verbosity_stack)
+    call print("verbosity_cascade_stack: ")
+    call print(this%verbosity_cascade_stack)
+    call print("initialised "//this%initialised)
+    call print_title("")
+  end subroutine print_inoutput
 
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 !X
@@ -1888,20 +1925,35 @@ contains
     write(string_cat_logical_array,format) string, log
   end function string_cat_logical_array
 
-  elemental function int_format_length(i) result(len)
+  elemental function int_format_length_isp(i) result(len)
     integer, intent(in)::i
     integer::len
     len = max(1,(-sign(1, i)+1)/2 + ceiling(log10(abs(real(i,dp))+0.01_dp)))
-  end function int_format_length
+  end function int_format_length_isp
 
-  function string_cat_int(string, int)
+  elemental function int_format_length_idp(i) result(len)
+    integer(idp), intent(in) :: i
+    integer :: len
+    len = max(1_idp,(-sign(1_idp, i)+1_idp)/2_idp + ceiling(log10(abs(real(i,dp))+0.01_dp), idp))
+  end function int_format_length_idp
+
+  function string_cat_isp(string, int) result(res)
     character(*),      intent(in)  :: string
     integer,           intent(in)  :: int
     ! below we work out the exact length of the resultant string
-    character(len(string)+int_format_length(int)) :: string_cat_int
+    character(len(string)+int_format_length(int)) :: res
 
-    write(string_cat_int,'(a,i0)') string, int
-  end function string_cat_int
+    write(res,'(a,i0)') string, int
+  end function string_cat_isp
+
+  function string_cat_idp(string, int) result(res)
+    character(*),      intent(in)  :: string
+    integer(idp),      intent(in)  :: int
+    ! below we work out the exact length of the resultant string
+    character(len(string)+int_format_length(int)) :: res
+
+    write(res,'(a,i0)') string, int
+  end function string_cat_idp
 
   function int_cat_string(int,string)
     character(*),      intent(in)  :: string
@@ -2089,7 +2141,7 @@ contains
        endif
        write(string_cat_real,format) string, r
     else
-       write(string_cat_real,'(i0,a)') string, int(r)
+       write(string_cat_real,'(a,i0)') string, int(r)
     endif
 
   end function string_cat_real
@@ -2105,6 +2157,27 @@ contains
 
   end function string_cat_complex
 
+  !% Returns a string with number shortened to 2 to 4 digits and si prefix appended
+  function i2si(number) result(res)
+    integer(idp), intent(in) :: number
+    character(:), allocatable :: res
+    character, parameter :: prefixes(0:*) = [' ', 'K', 'M', 'G', 'T', 'P', 'E']
+
+    integer :: i, l
+    integer(idp) :: num
+    character(5) :: str
+
+    num = number
+    do i = lbound(prefixes, 1), ubound(prefixes, 1)-1
+      if (num < 10000) exit
+      num = num / 1000
+    end do
+    str = "" // num
+
+    l = len_trim(str)
+    allocate(character(len=l+2) :: res)
+    res = str(1:l) // " " // prefixes(i)
+  end function i2si
 
   !% Return the mpi size and rank for the communicator 'comm'.
   !% this routine aborts of _MPI is not defined
@@ -2158,6 +2231,7 @@ contains
     !% MPI process.
     character(30) :: arg
     integer       :: status, i, n
+    logical       :: master_only
 
 #ifdef _MPI
     integer::PRINT_ALWAYS
@@ -2186,12 +2260,13 @@ contains
 #endif
 
     call cpu_time(start_time)
-    mainlog%mpi_all_inoutput_flag = optional_default(.false., mpi_all_inoutput)
+    master_only = .not. optional_default(.false., mpi_all_inoutput)
 
     ! Initialise the verbosity stack and default logger
-    call initialise(mainlog, filename=mainlog_file, unit=mainlog_unit, verbosity=verbosity, action=OUTPUT)
+    call initialise(mainlog, filename=mainlog_file, unit=mainlog_unit, verbosity=verbosity, &
+        action=OUTPUT, master_only=master_only)
     call print_mpi_id(mainlog)
-    call initialise(errorlog,filename='stderr')
+    call initialise(errorlog, filename='stderr', master_only=master_only)
     call print_mpi_id(errorlog)
     error_unit = errorlog%unit
 
@@ -2310,9 +2385,18 @@ contains
 #ifdef _MPI
     integer :: PRINT_ALWAYS
 #endif
+    logical :: ltemp
+    integer, allocatable :: seeds(:), idums(:)
+
+    call print("")
+    call system_get_random_seeds(seeds, idums)
+    ltemp = mainlog%mpi_all_inoutput_flag
+    mainlog%mpi_all_inoutput_flag = .true.
+    call print('libAtoms::Finalise: random seeds(:) = '//seeds, PRINT_VERBOSE)
+    call print('libAtoms::Finalise: random idums(:) = '//idums, PRINT_VERBOSE)
+    mainlog%mpi_all_inoutput_flag = ltemp
 
     call date_and_time(values=values)
-    call print("")
     call print('libAtoms::Finalise: '//date_and_time_string(values))
     call print("libAtoms::Finalise: Bye-Bye!")
     call finalise(mainlog)
@@ -2343,7 +2427,7 @@ contains
        if (i==4) cycle ! We don't use the local adjustment to UTC
        write(time(i),'(i0.2)') values(i)
     end do
-    write(date_and_time_string,'(11a)') time(3),'/',time(2),'/',year,'   ',time(5),':',time(6),':',time(7)
+    write(date_and_time_string,'(11a)') year,'-',time(2),'-',time(3),' ',time(5),':',time(6),':',time(7)
 
   end function date_and_time_string
 
@@ -2379,6 +2463,29 @@ contains
     enddo
 !$OMP end parallel
   end subroutine system_set_random_seeds
+
+  subroutine system_get_random_seeds(seeds, idums)
+    integer, intent(out), allocatable :: seeds(:), idums(:)
+
+    integer :: n
+
+    call random_seed(size=n)
+    call reallocate(seeds, n)
+    call random_seed(get=seeds)
+
+#ifdef _OPENMP
+    !$omp parallel shared(idums)
+    !$omp single
+    call reallocate(idums, omp_get_num_threads())
+    idums = 0
+    !$omp end single
+    idums(omp_get_thread_num()+1) = idum
+    !$omp end parallel
+#else
+    call reallocate(idums, 1)
+    idums(1) = idum
+#endif
+  end subroutine system_get_random_seeds
 
   !% Called by 'system_initialise' to print welcome messages and
   !% seed the random number generator.
@@ -3394,10 +3501,18 @@ end function pad
 
    end function linebreak_string
 
-   subroutine mem_info(total_mem, free_mem)
+   subroutine mem_info_i(total_mem_i, free_mem_i)
+    integer(idp), intent(out) :: total_mem_i, free_mem_i
+    real(8) :: total_mem_r, free_mem_r
+    call mem_info(total_mem_r, free_mem_r)
+    total_mem_i = int(total_mem_r, idp)
+    free_mem_i = int(free_mem_r, idp)
+   end subroutine mem_info_i
+
+   subroutine mem_info_r(total_mem, free_mem)
      real(8), intent(out) :: total_mem, free_mem
      call c_mem_info(total_mem, free_mem)
-   end subroutine mem_info
+   end subroutine mem_info_r
 
    subroutine print_mem_info(file)
       type(inoutput), intent(in), optional :: file
@@ -3559,5 +3674,65 @@ end function pad
 
    end subroutine progress_timer
 
+   function increase_to_multiple(a, m) result(res)
+     integer, intent(in) :: a, m
+     integer :: res
+     res = (a / m) * m
+     if (res < a) res = res + m
+   end function increase_to_multiple
+
+   !% get indices of unique array elements and references
+   !% to these indices for each element of the array
+   subroutine get_uniqs_refs_char1(array, uniqs, refs, lower_bound)
+    character(*), intent(in) :: array(lower_bound:)
+    integer, intent(out), allocatable :: uniqs(:)
+    integer, intent(out), allocatable :: refs(:)
+    integer, intent(in) :: lower_bound
+
+    integer :: r, u, n_vals
+    integer :: lb, ub, nb
+    integer, allocatable :: vals(:)
+
+    lb = lbound(array, 1)
+    ub = ubound(array, 1)
+    allocate(vals(lb:ub))
+    allocate(refs(lb:ub))
+
+    n_vals = 0
+    do_refs: do r = lb, ub
+      nb = n_vals + lb - 1
+      do u = nb, lb, -1  ! assuming similar neighbours
+        if (array(r) == array(vals(u))) then
+          refs(r) = u
+          cycle do_refs
+        end if
+      end do
+      refs(r) = nb + 1
+      vals(refs(r)) = r
+      n_vals = n_vals + 1
+    end do do_refs
+
+    nb = n_vals + lb - 1
+    allocate(uniqs(lb:nb))
+    uniqs = vals(lb:nb)
+  end subroutine get_uniqs_refs_char1
+
+  function join_char1(array, sep) result(res)
+    character(*), intent(in) :: array(:)
+    character(*), intent(in) :: sep
+    character(:), allocatable :: res
+
+    integer :: i, o, l_res, l_as
+
+    l_as = len(array) + len(sep)
+    l_res = l_as * size(array) - len(sep)
+    allocate(character(l_res) :: res)
+    o = 0
+    do i = lbound(array, 1), ubound(array, 1) - 1
+      res(o+1:o+l_as) = array(i) // sep
+      o = o + l_as
+    end do
+    res(o+1:) = array(ubound(array, 1))
+  end function join_char1
 
 end module system_module

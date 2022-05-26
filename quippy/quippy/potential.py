@@ -100,7 +100,7 @@ class Potential(ase.calculators.calculator.Calculator):
         # from old
         if atoms is not None:
             atoms.calc = self
-        self.name = args_str
+        self.args_str = args_str
         if isinstance(calc_args, dict):
             calc_args = key_val_dict_to_str(calc_args)
         elif calc_args is None:
@@ -110,6 +110,19 @@ class Potential(ase.calculators.calculator.Calculator):
         # storage of non-standard results
         self.extra_results = {'config': {},
                               'atoms': {}}
+
+    # These three functions below are left in only for purposebackward compatibility, 
+    # we remember to clean it up if/when we decide ASE pre-3.23.0 isn't worth supporting.
+    def _get_name(self):
+        return self.name_
+
+    @property
+    def name(self):
+        return self._get_name()
+    
+    @name.setter
+    def name(self, name):
+        self.name_ = name
 
     @set_doc(quippy.potential_module.Potential.calc.__doc__,
     """
