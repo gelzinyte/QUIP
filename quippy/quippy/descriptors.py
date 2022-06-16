@@ -83,7 +83,7 @@ class Descriptor:
         # super convoluted though :D should just rethink it at some point
         self.n_dim = self.dimensions()
         self.n_perm = self.get_n_perm()
-                if ase_to_quip_kwargs is not None:
+        if ase_to_quip_kwargs is not None:
             self.ase_to_quip_kwargs = ase_to_quip_kwargs
         else:
             self.ase_to_quip_kwargs = {}
